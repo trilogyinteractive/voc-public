@@ -1,43 +1,7 @@
 /* Use an immediately invoked function to isolate widget variables */
 (function(){
 
-  /* Local JQuery variable */
-  var jQuery;
-
-  /* Load jQuery if it is not present */
-  if (window.jQuery === undefined || window.jQuery.fn.jquery != '1.7.2') {
-    var script_tag = document.createElement('script');
-    script_tag.setAttribute('type', 'text/javascript');
-    script_tag.setAttribute('src',
-      "http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js");
-
-    /* Wait for the script to load */
-    if(script_tag.readyState) {
-      // For Old versions of IE
-      script_tag.onreadystatechange = function() {
-        if(this.readyState == 'complete' || this.readyState == 'loaded') {
-          scriptLoadHandler();
-        }
-      };
-    } else {
-      //Other browsers
-      script_tag.onload = scriptLoadHandler;
-    }
-
-    // Try to find the head, otherwise default to the documentElement
-    (document.getElementsByTagName("head")[0] || document.documentElement).appendChild(script_tag);
-
-  } else {
-    /* The site already has jQuery loaded */
-    jQuery = window.jQuery;
-    main();
-  }
-  /* Called once jQuery has been loaded */
-  function scriptLoadHandler(){
-    /* Restore jQuery and window.jQuery to their original values */
-    jQuery = window.jQuery.noConflict();
-    main();
-  }
+  <%= render 'load_jquery' %>
 
   /* main - Main function for the voc widget.  This function is called once */
   /* jQuery has been loaded.                                                */
@@ -80,7 +44,7 @@
       var _url = "http://"+ _hostname + "/surveys/" + _surveyID + ".json";
       var target = jQuery("#" + _targetID)
       var surveyID = _surveyID
-      
+
       /* get the survey identified by id _surveyID and insert it into the */
       /* DOM element _targetID.                                           */
       jQuery.getJSON(_url, "callback=?&page_url=" + _pageURL, function(data){
@@ -88,12 +52,12 @@
       });
 
       jQuery(document).on("submit", "#"+_targetID+" form", function(){
-      
+
         // create and post to a hidden iframe to avoid cross-domain POST limitations
         var iframe = jQuery("<iframe>");
         var uniqueString = "surveyPostContainerIframe";
         var form = target.children("form").first();
-        
+
         // add the hidden iframe
         jQuery("body").append(iframe);
         iframe.hide();
@@ -133,20 +97,20 @@
 /******************* Survey.js ******************************************/
 function show_next_page(page){
   var required_unanswered = false;
-  
+
   required_unanswered = check_for_unanswered_required(page);
-  
+
   if (!required_unanswered){
     jQuery("#page_" + page).hide();
     var next_page = jQuery("#page_" + page + "_next_page").val();
-    
+
     /* Set the prev page on next page */
    set_prev_page(page, next_page);
-    
-    jQuery("#page_"+ next_page).show();  
+
+    jQuery("#page_"+ next_page).show();
     window.location.hash="PAGE_" + next_page;
   } else {
-    alert('Please answer all required questions before moving on to the next page.');
+    alert(survey_required_fields_error);
   }
 
 }
@@ -180,9 +144,10 @@ function check_for_unanswered_required(page) {
           required =  true;
         } else if( jQuery(".question_" + question_number + "_answer").attr('type') == "text" && jQuery(".question_" + question_number + "_answer").val() == "") {
           required =  true;
-        } else if( jQuery(".question_" + question_number + "_answer").attr('type') == "textarea" && jQuery(".question_" + question_number + "_answer").val() == "") {
+        } else if( $(".question_" + question_number + "_answer").prop('tagName').toLowerCase() == "textarea" && $(".question_" + question_number + "_answer").val() == "") {
+          /* a textarea does not have a an attr('type') so use the prop('tagName') */
           required =  true;
-        } 
+        }
       }
     });
     return required;
@@ -192,7 +157,7 @@ function validate_before_submit(page){
   if (!check_for_unanswered_required(page)){
     return true;
   } else {
-    alert('Please answer all required questions before moving on to the next page.');
+    alert(survey_required_fields_error);
     return false;
   }
 

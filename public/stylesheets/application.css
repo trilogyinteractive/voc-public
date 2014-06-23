@@ -121,6 +121,18 @@ a img {
 	vertical-align: top;
 }
 
+.vocradioslong .vocradio {
+	display: block;
+	margin-bottom: 5px;
+	margin-top: 5px;
+}
+
+.voccheckboxeslong .voccheckbox {
+	display: block;
+	margin-bottom: 5px;
+	margin-top: 5px;
+}
+
 textarea {
 	font-family: Verdana, Helvetica, Arial, san-serif;
 	font-size: 11px;
@@ -534,12 +546,12 @@ span.surveyNav4 {
 }
 
 span.surveyNavPrev {
-	width: 105px;
+	/*width: 105px;*/
 	display: inline-block;
 }
 
 span.surveyNavNext {
-	width: 85px;
+	/*width: 85px;*/
 	display: inline-block;
 }
 
@@ -589,7 +601,7 @@ span.pageNum {
 .pagination a, .pagination a:link, .pagination a:visited {
 	font-weight: normal;
 	color: #243b7c;
-	text-decoration: unerline;
+	text-decoration: underline;
 }
 
 .pagination a:hover, .pagination a:active {

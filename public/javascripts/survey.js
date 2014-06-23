@@ -4,32 +4,63 @@ $(function() {
 	if (page_url.val() == "" && parent) {
 		page_url.val(parent.document.location.origin + parent.document.location.pathname);
 	}
+
+  //setup before functions
+  var changeTimer;                //timer identifier
+  var changeInterval = 5000;  //time in ms, 10seconds
+  var lastSubmitted = new Date().getTime()-changeInterval;
+  //on change, start countdown
+  $(".voc-form").on( "change", function( event ) {
+    timer_form($(this).serialize());
+  });
+
+  function timer_form(form_data){
+    // if not submitted in last 10 seconds, submit the survey
+    clearTimeout(changeTimer);
+    changeTimer = setTimeout(post_form(form_data), changeInterval);
+  }
+  function post_form(form_data){
+    if((new Date().getTime() - lastSubmitted) > changeInterval){
+      lastSubmitted = new Date().getTime();
+      $.post( "/survey_responses/partial",form_data);
+    }
+  }
 });
+
+function replace_page_number_in_title(title, number) {
+	return title.replace(/ - Page \d+ - /, " - Page " + number + " - ");
+}
 
 function show_next_page(page){
 	var required_unanswered = false;
-	
+
 	required_unanswered = check_for_unanswered_required(page);
-	
+
 	if (!required_unanswered){
 		$("#page_" + page).hide();
 		var next_page = $("#page_" + page + "_next_page").val();
-    
-    /* Set the prev page on next page */
-   set_prev_page(page, next_page);
-    
-		$("#page_"+ next_page).show();	
+
+	    /* Set the prev page on next page */
+	    set_prev_page(page, next_page);
+
+		$("#page_"+ next_page).show();
 		window.location.hash="PAGE_" + next_page;
+
+		var title = $(document).prop("title");
+		$(document).prop("title", replace_page_number_in_title(title, next_page));
 	} else {
-		alert('Please answer all required questions before moving on to the next page.');
+		alert(survey_required_fields_error);
 	}
 
 }
 
 function show_prev_page(page){
 	$("#page_"+page).hide();
-	$("#page_"+ $("#page_" + page + "_prev_page").val() ).show();
-	window.location.hash = "PAGE_" + page;
+  $("#page_"+ $("#page_" + page + "_prev_page").val() ).show();
+	window.location.hash = "PAGE_" + prev_page;
+
+	var title = $(document).prop("title");
+	$(document).prop("title", replace_page_number_in_title(title, prev_page));
 }
 
 function set_next_page(current_page, next_page) {
@@ -55,9 +86,10 @@ function check_for_unanswered_required(page) {
 					required =  true;
 				} else if( $(".question_" + question_number + "_answer").attr('type') == "text" && $(".question_" + question_number + "_answer").val() == "") {
 					required =  true;
-				} else if( $(".question_" + question_number + "_answer").attr('type') == "textarea" && $(".question_" + question_number + "_answer").val() == "") {
+				} else if( $(".question_" + question_number + "_answer").prop('tagName').toLowerCase() == "textarea" && $(".question_" + question_number + "_answer").val() == "") {
+					/* a textarea does not have a an attr('type') so use the prop('tagName') */
 					required =  true;
-				} 
+				}
 			}
 		});
 		return required;
@@ -67,7 +99,7 @@ function validate_before_submit(page){
 	if (!check_for_unanswered_required(page)){
 		return true;
 	} else {
-		alert('Please answer all required questions before moving on to the next page.');
+		alert(survey_required_fields_error);
 		return false;
 	}
 

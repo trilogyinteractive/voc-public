@@ -5,6 +5,10 @@ require 'csv'
 # A SurveyVersion is a working copy of a survey.  Only one version may be published (and
 # therefore collecting responses from the public site application) at a time.
 class SurveyVersion < ActiveRecord::Base
+  include Redis::Objects
+  include ResqueAsyncRunner
+  @queue = :voc_csv
+
   belongs_to :survey, :touch => true
   has_many :pages,           :dependent => :destroy
   has_many :survey_elements, :dependent => :destroy
@@ -38,6 +42,22 @@ class SurveyVersion < ActiveRecord::Base
 
   # Add methods to access the name and description of a survey from a version instance
   delegate :name, :description, :to => :survey, :prefix => true
+
+  hash_key :temp_visit_count
+  hash_key :temp_invitation_count
+  hash_key :temp_invitation_accepted_count
+
+  def increment_temp_visit_count
+    temp_visit_count.incr(today_string, 1)
+  end
+
+  def increment_temp_invitation_count
+    temp_invitation_count.incr(today_string, 1)
+  end
+
+  def increment_temp_invitation_accepted_count
+    temp_invitation_accepted_count.incr(today_string, 1)
+  end
 
   # Create a CSV export of the survey responses and notify the requesting user by email
   # when the export has completed and is available for download.
@@ -82,15 +102,23 @@ class SurveyVersion < ActiveRecord::Base
     # when the Export instance is created.
     file_name = "#{Time.now.strftime("%Y%m%d%H%M")}-#{self.survey.name[0..10]}-#{self.version_number}.csv"
     CSV.open("#{Rails.root}/tmp/#{file_name}", "wb") do |csv|
-      csv << ["Date", "Page URL"].concat((custom_view || self).display_fields.map(&:name))
+
+      unless custom_view.present?
+        display_field_headers = self.display_fields.order("display_order asc").map(&:name)
+      else
+        display_field_headers = custom_view.ordered_display_fields.map(&:name)
+      end
+      csv << ["Date", "Page URL"].concat(display_field_headers)
 
       survey_responses.find_in_batches do |responses|
         responses.each do |response|
           if custom_view.present?
-            csv << [response.created_at, response.page_url].concat(response.display_field_values.where(:display_field_id => custom_view.ordered_display_fields.map(&:id)).includes(:display_field => :display_field_custom_views).order('display_field_custom_views.display_order ASC').map {|dfv| dfv.value.blank? ? '' : dfv.value.gsub("{%delim%}", ", ")})
+            response_record = response.display_field_values.where(:display_field_id => custom_view.ordered_display_fields.map(&:id)).includes(:display_field => :display_field_custom_views).order('display_field_custom_views.display_order ASC').map {|dfv| dfv.value.blank? ? '' : dfv.value.gsub("{%delim%}", ", ")}
           else
-            csv << [response.created_at, response.page_url].concat(response.display_field_values.includes(:display_field).order("display_fields.display_order asc").map {|dfv| dfv.value.blank? ? '' : dfv.value.gsub("{%delim%}", ", ")})
+            response_record = response.display_field_values.includes(:display_field).order("display_fields.display_order asc").map {|dfv| dfv.value.blank? ? '' : dfv.value.gsub("{%delim%}", ", ")}
           end
+
+          csv << [response.created_at, response.page_url].concat(response_record)
         end
       end
     end
@@ -99,7 +127,13 @@ class SurveyVersion < ActiveRecord::Base
 
     # Notify the user that the export has been successful and is available for download
     if export_file.persisted?
-      ExportMailer.delay.export_download(User.find(user_id).email, export_file.id)
+      resque_args = User.find(user_id).email, export_file.id
+
+      begin
+        Resque.enqueue(ExportMailer, *resque_args)
+      rescue
+        ResquedJob.create(class_name: "ExportMailer", job_arguments: resque_args)
+      end
     end
 
     # Remove the temporary file used to create this export
@@ -223,6 +257,15 @@ class SurveyVersion < ActiveRecord::Base
 
       new_sv
     end
+  end
+
+  private
+  def today
+    Time.now.in_time_zone("Eastern Time (US & Canada)").to_date
+  end
+
+  def today_string
+    today.strftime("%Y-%m-%d")
   end
 end
 
